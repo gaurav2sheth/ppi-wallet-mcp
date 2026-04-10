@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ppi-wallet": {
+      "command": "/usr/local/bin/node",
+      "args": ["/Users/GauravSheth/Documents/PPI_Wallet/mcp/wallet-mcp-server.js"],
+      "env": {
+        "DATABASE_URL": "postgresql://ppsl_user:change_me@localhost:5432/ppsl_wallet_dev"
+      }
+    }
+  }
+}
