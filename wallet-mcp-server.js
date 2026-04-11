@@ -933,7 +933,124 @@ server.tool(
   }
 );
 
-// ── Start the server over stdio transport ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 36: get_sub_wallets
+// ═══════════════════════════════════════════════════════════════════════════════
+import {
+  getSubWallets as _getSubWallets,
+  loadSubWallet as _loadSubWallet,
+  spendFromSubWallet as _spendFromSubWallet,
+  validateMerchantEligibility as _validateMerchantEligibility,
+} from './services/sub-wallet-service.js';
+
+server.tool(
+  'get_sub_wallets',
+  'Get all sub-wallet balances and status for a user. Use when asked about food wallet, travel wallet, FASTag, gift or fuel balance, or benefits wallets.',
+  {
+    user_id: z.string().describe('Unique wallet user ID (e.g. user_001)'),
+  },
+  async ({ user_id }) => {
+    try {
+      const result = _getSubWallets(user_id);
+      if (!result) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'User not found', user_id }, null, 2) }] };
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message, user_id }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 37: load_sub_wallet
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'load_sub_wallet',
+  'Load a specific sub-wallet for a user on behalf of an employer or issuer. Use for food, transit, FASTag, gift, or fuel wallet loading.',
+  {
+    employer_id: z.string().describe('Employer or issuer ID (e.g. employer_001)'),
+    user_id: z.string().describe('User ID to load the sub-wallet for'),
+    type: z.enum(['FOOD', 'NCMC TRANSIT', 'FASTAG', 'GIFT', 'FUEL']).describe('Sub-wallet type'),
+    amount: z.number().describe('Amount to load in paise'),
+    occasion: z.string().optional().describe('Occasion for the load (e.g. Monthly Benefits, Diwali Bonus)'),
+  },
+  async ({ employer_id, user_id, type, amount, occasion }) => {
+    try {
+      const result = _loadSubWallet(employer_id, user_id, type, amount, occasion);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 38: get_sub_wallet_transactions
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'get_sub_wallet_transactions',
+  'Get transaction history for a specific sub-wallet type. Use when asked about food wallet transactions, transit spending, etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    type: z.enum(['FOOD', 'NCMC TRANSIT', 'FASTAG', 'GIFT', 'FUEL']).describe('Sub-wallet type'),
+    days: z.number().default(30).describe('Number of past days to fetch'),
+  },
+  async ({ user_id, type, days }) => {
+    try {
+      const subWalletResult = _getSubWallets(user_id);
+      if (!subWalletResult) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'User not found', user_id }, null, 2) }] };
+      }
+      const sw = subWalletResult.sub_wallets.find(s => s.type === type);
+      if (!sw) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: `No ${type} sub-wallet found for user`, user_id, type }, null, 2) }] };
+      }
+
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const txns = (sw.recent_transactions || []).filter(t => new Date(t.timestamp) >= cutoff);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            user_id,
+            sub_wallet_type: type,
+            balance: sw.balance,
+            balance_paise: sw.balance_paise,
+            transactions: txns,
+            transaction_count: txns.length,
+          }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 39: check_merchant_eligibility
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'check_merchant_eligibility',
+  'Check if a merchant category is eligible for a specific sub-wallet type. Use when asked "can I use my food wallet at..." or "where can I use my transit wallet?".',
+  {
+    merchant_category: z.string().describe('Merchant category (e.g. Food & Dining, Fuel, Transit)'),
+    sub_wallet_type: z.enum(['FOOD', 'NCMC TRANSIT', 'FASTAG', 'GIFT', 'FUEL']).describe('Sub-wallet type to check'),
+  },
+  async ({ merchant_category, sub_wallet_type }) => {
+    try {
+      const result = _validateMerchantEligibility(merchant_category, sub_wallet_type);
+      return { content: [{ type: 'text', text: JSON.stringify({ merchant_category, sub_wallet_type, ...result }, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ── Start the server over stdio transport ────────────────────────────────��────
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
