@@ -1,10 +1,8 @@
 /**
  * PPI Wallet MCP Server
  *
- * A Model Context Protocol server that exposes 3 tools for Claude:
- *   1. get_wallet_balance  — Fetch wallet balance for a user
- *   2. get_transaction_history — Fetch transactions for last N days
- *   3. flag_suspicious_transaction — Flag a transaction as suspicious
+ * A Model Context Protocol server that exposes 35 tools for Claude:
+ *   Wallet, transactions, analytics, KYC, compliance, disputes, notifications, and admin tools.
  *
  * Runs over stdio transport so Claude Desktop can connect directly.
  *
@@ -24,7 +22,6 @@ import {
   searchTransactions,
   getUserProfile,
   compareSpending,
-  estimateBalanceRunway,
   detectRecurringPayments,
   compareUsers,
   generateReport,
@@ -32,7 +29,6 @@ import {
   getSystemStats,
   searchUsers,
   getFlaggedTransactions,
-  getUserRiskProfile,
   suspendUser,
   getFailedTransactions,
   getKycStats,
@@ -42,8 +38,7 @@ import {
   transferP2P,
   payBill,
   requestRefund,
-  // Limits & compliance
-  checkLimits,
+  // Limits & compliance (checkLimits absorbed into getUserProfile)
   checkCompliance,
   // Disputes & support
   raiseDispute,
@@ -56,12 +51,10 @@ import {
   approveKyc,
   rejectKyc,
   requestKycUpgrade,
-  // Analytics
-  getMerchantInsights,
+  // Analytics (getMerchantInsights absorbed into getSpendingSummary)
   getPeakUsage,
   getMonthlyTrends,
-  // KYC Expiry
-  getKycExpiringUsers,
+  // KYC Expiry (getKycExpiringUsers absorbed into queryKycExpiry)
   queryKycExpiry,
   generateKycRenewalReport,
 } from './mock-data.js';
@@ -79,15 +72,18 @@ server.tool(
   'get_wallet_balance',
   // Description — tells Claude when to use this tool
   'Retrieves the current INR balance and account status for a PPI wallet user. ' +
-  'Use this when the user asks about their balance or account standing.',
+  'Set include_runway=true to also estimate how many days the balance will last (replaces estimate_balance_runway). ' +
+  'Use this when the user asks about their balance, account standing, or "how long will my money last?".',
   // Input schema — strict validation via Zod
   {
     user_id: z.string().describe('Unique wallet user ID (e.g. user_001)'),
+    include_runway: z.boolean().default(false).describe('Include balance runway estimation (avg daily spend, days remaining, exhaustion date)'),
+    lookback_days: z.number().default(30).describe('Days to calculate average spending for runway estimation (default: 30)'),
   },
   // Handler — called when Claude invokes this tool
-  async ({ user_id }) => {
+  async ({ user_id, include_runway, lookback_days }) => {
     try {
-      const result = getWalletBalance(user_id);
+      const result = getWalletBalance(user_id, { include_runway, lookback_days });
 
       if (!result) {
         return {
@@ -230,15 +226,18 @@ server.tool(
 // ═══════════════════════════════════════════════════════════════════════════════
 server.tool(
   'get_spending_summary',
-  'Returns a category-wise spending breakdown (Food, Travel, Shopping, etc.) for a user. ' +
-  'Use this when the user asks "how much did I spend on food?", "where is my money going?", or wants a spending analysis.',
+  'Returns spending breakdown for a user. Use group_by="category" (default) for category-wise analysis, ' +
+  'or group_by="merchant" for top merchant insights (replaces get_merchant_insights). ' +
+  'Use this when the user asks "how much did I spend on food?", "where is my money going?", "top merchants", "favorite shops".',
   {
     user_id: z.string().describe('Unique wallet user ID (e.g. user_001)'),
     days: z.number().default(30).describe('Number of past days to analyze (default: 30)'),
+    group_by: z.enum(['category', 'merchant']).default('category').describe('Group spending by category or merchant (default: category)'),
+    top_n: z.number().default(10).describe('Number of top items to return when group_by=merchant (default: 10)'),
   },
-  async ({ user_id, days }) => {
+  async ({ user_id, days, group_by, top_n }) => {
     try {
-      const result = getSpendingSummary(user_id, days);
+      const result = getSpendingSummary(user_id, days, { group_by, top_n });
       if (!result) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'User not found', user_id }, null, 2) }] };
       }
@@ -283,13 +282,15 @@ server.tool(
 server.tool(
   'get_user_profile',
   'Returns full user profile including KYC tier, account limits, account age, and recent activity stats. ' +
-  'Use this when the user asks about their profile, KYC status, daily/monthly limits, or account details.',
+  'Set include_limits=true for real-time limit utilization (daily/monthly/balance/P2P) — replaces check_limits. ' +
+  'Use this when the user asks about their profile, KYC status, daily/monthly limits, "what are my limits?", or account details.',
   {
     user_id: z.string().describe('Unique wallet user ID (e.g. user_001)'),
+    include_limits: z.boolean().default(false).describe('Include real-time limit utilization (daily, monthly, balance cap, P2P limits)'),
   },
-  async ({ user_id }) => {
+  async ({ user_id, include_limits }) => {
     try {
-      const result = getUserProfile(user_id);
+      const result = getUserProfile(user_id, { include_limits });
       if (!result) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'User not found', user_id }, null, 2) }] };
       }
@@ -326,31 +327,7 @@ server.tool(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TOOL 8: estimate_balance_runway
-// ═══════════════════════════════════════════════════════════════════════════════
-server.tool(
-  'estimate_balance_runway',
-  'Estimates how many days the user\'s balance will last based on average daily spending. ' +
-  'Use this when the user asks "how long will my balance last?", "when will I run out?", or "should I top up?".',
-  {
-    user_id: z.string().describe('Unique wallet user ID (e.g. user_001)'),
-    lookback_days: z.number().default(30).describe('Number of past days to calculate average spending from (default: 30)'),
-  },
-  async ({ user_id, lookback_days }) => {
-    try {
-      const result = estimateBalanceRunway(user_id, { lookback_days });
-      if (!result) {
-        return { content: [{ type: 'text', text: JSON.stringify({ error: 'User not found', user_id }, null, 2) }] };
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    } catch (err) {
-      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
-    }
-  }
-);
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TOOL 9: unflag_transaction
+// TOOL 8: unflag_transaction (estimate_balance_runway absorbed into get_wallet_balance)
 // ═══════════════════════════════════════════════════════════════════════════════
 server.tool(
   'unflag_transaction',
@@ -403,7 +380,7 @@ server.tool(
 // ═══════════════════════════════════════════════════════════════════════════════
 server.tool(
   'compare_users',
-  'Compares multiple users side-by-side on balance, spending, income, and activity. ' +
+  '[Admin-only] Compares multiple users side-by-side on balance, spending, income, and activity. ' +
   'Use this when an admin asks "compare Gaurav and Priya", "who spends more?", or wants a user comparison.',
   {
     user_ids: z.array(z.string()).describe('Array of user IDs to compare (e.g. ["user_001", "user_002"])'),
@@ -510,33 +487,10 @@ server.tool(
   }
 );
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ADMIN TOOL 4: get_user_risk_profile
-// ═══════════════════════════════════════════════════════════════════════════════
-server.tool(
-  'get_user_risk_profile',
-  'Generates a comprehensive risk assessment for a specific user. Aggregates risk signals including ' +
-  'high-value transactions, transaction velocity, flagged count, balance utilization, P2P volume, and account status. ' +
-  'Returns a 0-100 risk score with LOW/MEDIUM/HIGH classification and actionable recommendations. ' +
-  'Use this when an admin asks "is this user high-risk?", "risk profile for Anita Desai", or "should we investigate this user?".',
-  {
-    user_id: z.string().describe('User ID to assess (e.g. user_004)'),
-  },
-  async ({ user_id }) => {
-    try {
-      const result = getUserRiskProfile(user_id);
-      if (!result) {
-        return { content: [{ type: 'text', text: JSON.stringify({ error: 'User not found', user_id }, null, 2) }] };
-      }
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    } catch (err) {
-      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
-    }
-  }
-);
+// (get_user_risk_profile absorbed into check_compliance with include_risk_score param)
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ADMIN TOOL 5: suspend_user
+// ADMIN TOOL 4: suspend_user
 // ═══════════════════════════════════════════════════════════════════════════════
 server.tool(
   'suspend_user',
@@ -709,34 +663,20 @@ server.tool(
 // LIMITS & COMPLIANCE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-server.tool(
-  'check_limits',
-  'Shows real-time limit utilization for a user: daily spending, monthly spending, max balance, and P2P limits. ' +
-  'Use this when the user asks "what are my limits?", "how much can I spend today?", "am I near my limit?".',
-  {
-    user_id: z.string().describe('Unique wallet user ID'),
-  },
-  async ({ user_id }) => {
-    try {
-      const result = checkLimits(user_id);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
-    } catch (err) {
-      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
-    }
-  }
-);
+// (check_limits absorbed into get_user_profile with include_limits param)
 
 server.tool(
   'check_compliance',
   'Runs RBI PPI compliance checks on a user: balance limits, KYC state, Aadhaar verification, P2P usage, flagged transactions. ' +
-  'Returns compliant/non-compliant status with issues and warnings. ' +
-  'Use this when an admin asks "is this user compliant?", "compliance check for user_003", or "any regulatory issues?".',
+  'Set include_risk_score=true for a 0-100 risk assessment with risk factors (replaces get_user_risk_profile). ' +
+  'Use this when an admin asks "is this user compliant?", "risk profile", "compliance check for user_003", or "any regulatory issues?".',
   {
     user_id: z.string().describe('Unique wallet user ID'),
+    include_risk_score: z.boolean().default(false).describe('Include 0-100 risk score with risk factors, activity summary, and flagged transaction details'),
   },
-  async ({ user_id }) => {
+  async ({ user_id, include_risk_score }) => {
     try {
-      const result = checkCompliance(user_id);
+      const result = checkCompliance(user_id, { include_risk_score });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
     } catch (err) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
@@ -910,28 +850,11 @@ server.tool(
 // ANALYTICS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-server.tool(
-  'get_merchant_insights',
-  'Analyzes top merchants by spending for a user. Shows spend amount, visit count, category, and percentage breakdown. ' +
-  'Use this when the user asks "where do I spend the most?", "top merchants", "which shops do I visit most?".',
-  {
-    user_id: z.string().describe('Unique wallet user ID'),
-    days: z.number().default(30).describe('Past days to analyze (default: 30)'),
-    top_n: z.number().default(10).describe('Number of top merchants to return (default: 10)'),
-  },
-  async ({ user_id, days, top_n }) => {
-    try {
-      const result = getMerchantInsights(user_id, { days, top_n });
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
-    } catch (err) {
-      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
-    }
-  }
-);
+// (get_merchant_insights absorbed into get_spending_summary with group_by='merchant' param)
 
 server.tool(
   'get_peak_usage',
-  'Analyzes platform-wide transaction patterns: peak hours, busiest days, and transaction type breakdown. ' +
+  '[Admin-only] Analyzes platform-wide transaction patterns: peak hours, busiest days, and transaction type breakdown. ' +
   'Use this when an admin asks "when is peak usage?", "busiest time of day?", "transaction patterns".',
   {
     days: z.number().default(30).describe('Past days to analyze (default: 30)'),
@@ -948,7 +871,7 @@ server.tool(
 
 server.tool(
   'get_monthly_trends',
-  'Shows month-over-month platform trends: transaction counts, volumes, active users, and growth rates. ' +
+  '[Admin-only] Shows month-over-month platform trends: transaction counts, volumes, active users, and growth rates. ' +
   'Use this when an admin asks "monthly growth", "how are we trending?", "month over month comparison".',
   {
     months: z.number().default(3).describe('Number of months to analyze (default: 3)'),
@@ -963,32 +886,13 @@ server.tool(
   }
 );
 
-// ── KYC Expiry Tools ──────────────────────────────────────────────────────────
-
-server.tool(
-  'get_kyc_expiring_users',
-  'Filters users whose MINIMUM KYC is expiring within a given timeframe. Shows urgency bands (expired, critical ≤7d, warning ≤30d, upcoming ≤90d). ' +
-  'Use when asked "which users have expiring KYC?", "KYC renewals due", "expired wallets".',
-  {
-    days_ahead: z.number().default(90).describe('Look-ahead window in days (default: 90)'),
-    include_expired: z.boolean().default(false).describe('Include already-expired users'),
-    urgency: z.enum(['expired', 'critical', 'warning', 'upcoming']).optional().describe('Filter by urgency band'),
-    sort_by: z.enum(['expiry_date', 'balance', 'name']).default('expiry_date').describe('Sort order'),
-  },
-  async ({ days_ahead, include_expired, urgency, sort_by }) => {
-    try {
-      const result = getKycExpiringUsers({ days_ahead, include_expired, urgency, sort_by });
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    } catch (err) {
-      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
-    }
-  }
-);
+// ── KYC Expiry Tools (get_kyc_expiring_users absorbed into query_kyc_expiry) ─
 
 server.tool(
   'query_kyc_expiry',
-  'Flexible database-style query for KYC expiry information. Supports date range filtering, state filters, balance thresholds, and returns aggregations. ' +
-  'Use when asked "KYC expiry between dates", "users with expiring KYC and balance above X", "KYC database query".',
+  'Flexible query for KYC expiry information with date ranges, state filters, balance thresholds, urgency bands, and aggregations. ' +
+  'Replaces get_kyc_expiring_users — use urgency param to filter by band (expired/critical/warning/upcoming). ' +
+  'Use when asked "KYC expiry between dates", "expiring KYC users", "critical KYC renewals", "KYC database query".',
   {
     from_date: z.string().optional().describe('Start date for expiry range (ISO format)'),
     to_date: z.string().optional().describe('End date for expiry range (ISO format)'),
@@ -996,11 +900,14 @@ server.tool(
     wallet_state: z.string().optional().describe('Filter by wallet state (ACTIVE, SUSPENDED, etc.)'),
     min_balance: z.string().optional().describe('Minimum balance in paise'),
     include_inactive: z.boolean().default(false).describe('Include inactive/suspended wallets'),
+    include_expired: z.boolean().default(false).describe('Include already-expired users'),
+    urgency: z.enum(['expired', 'critical', 'warning', 'upcoming', 'safe']).optional().describe('Filter by urgency band: expired, critical (≤7d), warning (≤30d), upcoming (≤90d), safe (>90d)'),
+    sort_by: z.enum(['expiry_date', 'balance', 'name']).default('expiry_date').describe('Sort results by expiry date, balance, or name'),
     limit: z.number().default(50).describe('Max results to return'),
   },
-  async ({ from_date, to_date, kyc_state, wallet_state, min_balance, include_inactive, limit }) => {
+  async ({ from_date, to_date, kyc_state, wallet_state, min_balance, include_inactive, include_expired, urgency, sort_by, limit }) => {
     try {
-      const result = queryKycExpiry({ from_date, to_date, kyc_state, wallet_state, min_balance, include_inactive, limit });
+      const result = queryKycExpiry({ from_date, to_date, kyc_state, wallet_state, min_balance, include_inactive, include_expired, urgency, sort_by, limit });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
