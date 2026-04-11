@@ -8,6 +8,7 @@
     "test": "node test-tools.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.87.0",
     "@modelcontextprotocol/sdk": "^1.0.0"
   }
 }

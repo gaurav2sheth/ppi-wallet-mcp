@@ -36,6 +36,30 @@ import {
   suspendUser,
   getFailedTransactions,
   getKycStats,
+  // Transaction operations
+  addMoney,
+  payMerchant,
+  transferP2P,
+  payBill,
+  requestRefund,
+  // Limits & compliance
+  checkLimits,
+  checkCompliance,
+  // Disputes & support
+  raiseDispute,
+  getDisputeStatus,
+  getRefundStatus,
+  // Notifications
+  getNotifications,
+  setAlertThreshold,
+  // KYC actions (admin)
+  approveKyc,
+  rejectKyc,
+  requestKycUpgrade,
+  // Analytics
+  getMerchantInsights,
+  getPeakUsage,
+  getMonthlyTrends,
 } from './mock-data.js';
 
 // ── Create MCP Server instance ────────────────────────────────────────────────
@@ -567,6 +591,367 @@ server.tool(
   async () => {
     try {
       const result = getKycStats();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRANSACTION OPERATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.tool(
+  'add_money',
+  'Adds money to a user\'s wallet. Validates KYC balance limits. ' +
+  'Use this when the user says "add money", "top up", "load wallet", or "recharge wallet".',
+  {
+    user_id: z.string().describe('Unique wallet user ID (e.g. user_001)'),
+    amount_paise: z.number().describe('Amount to add in paise (e.g. 100000 for ₹1,000)'),
+    source: z.string().default('UPI').describe('Payment source: UPI, Debit Card, NEFT, etc.'),
+  },
+  async ({ user_id, amount_paise, source }) => {
+    try {
+      const result = addMoney(user_id, { amount_paise, source });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'pay_merchant',
+  'Makes a payment to a merchant from the user\'s wallet. Checks balance sufficiency. ' +
+  'Use this when the user says "pay Swiggy ₹500", "make payment to Amazon", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    amount_paise: z.number().describe('Payment amount in paise (e.g. 50000 for ₹500)'),
+    merchant_name: z.string().describe('Merchant name (e.g. Swiggy, Amazon, Uber)'),
+    description: z.string().optional().describe('Payment description'),
+  },
+  async ({ user_id, amount_paise, merchant_name, description }) => {
+    try {
+      const result = payMerchant(user_id, { amount_paise, merchant_name, description });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'transfer_p2p',
+  'Transfers money from one wallet user to another (P2P transfer). Validates balance, P2P monthly limits, and recipient status. ' +
+  'Use this when the user says "send money to Priya", "transfer ₹1000 to user_002", etc.',
+  {
+    user_id: z.string().describe('Sender wallet user ID'),
+    recipient_id: z.string().describe('Recipient wallet user ID (e.g. user_002)'),
+    amount_paise: z.number().describe('Transfer amount in paise'),
+    note: z.string().optional().describe('Optional note/memo for the transfer'),
+  },
+  async ({ user_id, recipient_id, amount_paise, note }) => {
+    try {
+      const result = transferP2P(user_id, { amount_paise, recipient_id, note });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'pay_bill',
+  'Pays a bill (electricity, phone, water, etc.) from the user\'s wallet. ' +
+  'Use this when the user says "pay electricity bill", "pay my Jio recharge", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    amount_paise: z.number().describe('Bill amount in paise'),
+    biller_name: z.string().describe('Biller/utility name (e.g. MSEB, Jio, Airtel)'),
+    bill_number: z.string().optional().describe('Bill or account number'),
+    category: z.string().default('Utilities').describe('Bill category (Utilities, Telecom, Insurance, etc.)'),
+  },
+  async ({ user_id, amount_paise, biller_name, bill_number, category }) => {
+    try {
+      const result = payBill(user_id, { amount_paise, biller_name, bill_number, category });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'request_refund',
+  'Initiates a refund request for a specific transaction. Only debit transactions can be refunded. ' +
+  'Use this when the user says "refund my last payment", "I want a refund for txn_004", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    txn_id: z.string().describe('Transaction ID to refund (e.g. txn_004)'),
+    reason: z.string().describe('Reason for refund request'),
+  },
+  async ({ user_id, txn_id, reason }) => {
+    try {
+      const result = requestRefund(user_id, { txn_id, reason });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIMITS & COMPLIANCE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.tool(
+  'check_limits',
+  'Shows real-time limit utilization for a user: daily spending, monthly spending, max balance, and P2P limits. ' +
+  'Use this when the user asks "what are my limits?", "how much can I spend today?", "am I near my limit?".',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+  },
+  async ({ user_id }) => {
+    try {
+      const result = checkLimits(user_id);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'check_compliance',
+  'Runs RBI PPI compliance checks on a user: balance limits, KYC state, Aadhaar verification, P2P usage, flagged transactions. ' +
+  'Returns compliant/non-compliant status with issues and warnings. ' +
+  'Use this when an admin asks "is this user compliant?", "compliance check for user_003", or "any regulatory issues?".',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+  },
+  async ({ user_id }) => {
+    try {
+      const result = checkCompliance(user_id);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DISPUTES & SUPPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.tool(
+  'raise_dispute',
+  'Files a dispute for a specific transaction. Checks for duplicate active disputes. ' +
+  'Use this when the user says "I want to dispute this transaction", "file a complaint about txn_011", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    txn_id: z.string().describe('Transaction ID to dispute'),
+    type: z.enum(['failed_transaction', 'unauthorized', 'wrong_amount', 'merchant_issue', 'other']).default('failed_transaction').describe('Type of dispute'),
+    description: z.string().describe('Detailed description of the issue'),
+  },
+  async ({ user_id, txn_id, type, description }) => {
+    try {
+      const result = raiseDispute(user_id, { txn_id, type, description });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'get_dispute_status',
+  'Gets the status of a specific dispute or lists all disputes for a user. ' +
+  'Use this when the user asks "what\'s the status of my dispute?", "show my disputes", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    dispute_id: z.string().optional().describe('Specific dispute ID to check (omit to list all disputes for user)'),
+  },
+  async ({ user_id, dispute_id }) => {
+    try {
+      const result = getDisputeStatus(user_id, { dispute_id });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'get_refund_status',
+  'Gets the status of a specific refund or lists all refunds for a user. ' +
+  'Use this when the user asks "where is my refund?", "refund status", "show my refunds", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    refund_id: z.string().optional().describe('Specific refund ID to check (omit to list all refunds for user)'),
+  },
+  async ({ user_id, refund_id }) => {
+    try {
+      const result = getRefundStatus(user_id, { refund_id });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.tool(
+  'get_notifications',
+  'Retrieves notifications for a user. Can filter to show only unread notifications. ' +
+  'Use this when the user asks "show my notifications", "any alerts?", "unread messages", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    unread_only: z.boolean().default(false).describe('Set to true to show only unread notifications'),
+    limit: z.number().default(20).describe('Maximum notifications to return'),
+  },
+  async ({ user_id, unread_only, limit }) => {
+    try {
+      const result = getNotifications(user_id, { unread_only, limit });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'set_alert_threshold',
+  'Sets alert thresholds for a user: low balance warning, high transaction alert, daily spend limit alert. ' +
+  'Amounts are in rupees (not paise). ' +
+  'Use this when the user says "alert me when balance drops below ₹500", "set spending limit to ₹10,000/day", etc.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    low_balance: z.number().optional().describe('Alert when balance drops below this amount in rupees (e.g. 500)'),
+    high_transaction: z.number().optional().describe('Alert for transactions above this amount in rupees (e.g. 5000)'),
+    daily_spend: z.number().optional().describe('Alert when daily spending exceeds this amount in rupees (e.g. 10000)'),
+  },
+  async ({ user_id, low_balance, high_transaction, daily_spend }) => {
+    try {
+      const result = setAlertThreshold(user_id, { low_balance, high_transaction, daily_spend });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KYC ACTIONS (ADMIN)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.tool(
+  'approve_kyc',
+  'Approves a pending Full KYC application. Only works for users in FULL_KYC_PENDING state. ' +
+  'Upgrades the user to FULL tier with no wallet expiry. ' +
+  'Use this when an admin says "approve KYC for user_007", "approve Arjun Singh\'s KYC".',
+  {
+    user_id: z.string().describe('User ID to approve KYC for'),
+    admin_notes: z.string().optional().describe('Optional admin notes for the approval'),
+  },
+  async ({ user_id, admin_notes }) => {
+    try {
+      const result = approveKyc(user_id, { admin_notes });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'reject_kyc',
+  'Rejects a pending Full KYC application with a mandatory reason. Only works for FULL_KYC_PENDING state. ' +
+  'Use this when an admin says "reject KYC for user_007", "deny Arjun\'s KYC — documents unclear".',
+  {
+    user_id: z.string().describe('User ID to reject KYC for'),
+    reason: z.string().describe('Mandatory reason for rejection (e.g. "Document mismatch", "Blurry photo")'),
+  },
+  async ({ user_id, reason }) => {
+    try {
+      const result = rejectKyc(user_id, { reason });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'request_kyc_upgrade',
+  'Initiates a KYC upgrade from MIN_KYC to FULL_KYC. Changes state to FULL_KYC_PENDING. ' +
+  'Use this when a user says "upgrade my KYC", "I want full KYC", or an admin initiates an upgrade.',
+  {
+    user_id: z.string().describe('User ID to upgrade KYC for'),
+  },
+  async ({ user_id }) => {
+    try {
+      const result = requestKycUpgrade(user_id);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ANALYTICS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.tool(
+  'get_merchant_insights',
+  'Analyzes top merchants by spending for a user. Shows spend amount, visit count, category, and percentage breakdown. ' +
+  'Use this when the user asks "where do I spend the most?", "top merchants", "which shops do I visit most?".',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    days: z.number().default(30).describe('Past days to analyze (default: 30)'),
+    top_n: z.number().default(10).describe('Number of top merchants to return (default: 10)'),
+  },
+  async ({ user_id, days, top_n }) => {
+    try {
+      const result = getMerchantInsights(user_id, { days, top_n });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], ...(result.error ? { isError: true } : {}) };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'get_peak_usage',
+  'Analyzes platform-wide transaction patterns: peak hours, busiest days, and transaction type breakdown. ' +
+  'Use this when an admin asks "when is peak usage?", "busiest time of day?", "transaction patterns".',
+  {
+    days: z.number().default(30).describe('Past days to analyze (default: 30)'),
+  },
+  async ({ days }) => {
+    try {
+      const result = getPeakUsage({ days });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'get_monthly_trends',
+  'Shows month-over-month platform trends: transaction counts, volumes, active users, and growth rates. ' +
+  'Use this when an admin asks "monthly growth", "how are we trending?", "month over month comparison".',
+  {
+    months: z.number().default(3).describe('Number of months to analyze (default: 3)'),
+  },
+  async ({ months }) => {
+    try {
+      const result = getMonthlyTrends({ months });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
