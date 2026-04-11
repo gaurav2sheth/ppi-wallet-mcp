@@ -35,6 +35,7 @@ import {
   getUserRiskProfile,
   suspendUser,
   getFailedTransactions,
+  getKycStats,
 } from './mock-data.js';
 
 // ── Create MCP Server instance ────────────────────────────────────────────────
@@ -439,19 +440,20 @@ server.tool(
 // ═══════════════════════════════════════════════════════════════════════════════
 server.tool(
   'search_users',
-  'Searches for wallet users by name, phone number, KYC tier, account status, or balance range. ' +
+  'Searches for wallet users by name, phone number, KYC tier, KYC state, account status, or balance range. ' +
   'Use this when an admin asks "show me all suspended users", "find users with minimum KYC", ' +
-  '"who has balance above ₹1 lakh?", or searches for a specific person.',
+  '"who has balance above ₹1 lakh?", "pending KYC users", or searches for a specific person.',
   {
     query: z.string().optional().describe('Search by name, phone number, or user ID'),
     kyc_tier: z.enum(['FULL', 'MINIMUM']).optional().describe('Filter by KYC tier'),
+    kyc_state: z.enum(['UNVERIFIED', 'MIN_KYC', 'FULL_KYC_PENDING', 'FULL_KYC', 'REJECTED', 'SUSPENDED']).optional().describe('Filter by KYC verification state'),
     status: z.enum(['ACTIVE', 'SUSPENDED', 'DORMANT']).optional().describe('Filter by account status'),
     min_balance: z.number().optional().describe('Minimum balance in rupees (e.g. 1000)'),
     max_balance: z.number().optional().describe('Maximum balance in rupees (e.g. 10000)'),
   },
-  async ({ query, kyc_tier, status, min_balance, max_balance }) => {
+  async ({ query, kyc_tier, kyc_state, status, min_balance, max_balance }) => {
     try {
-      const result = searchUsers({ query, kyc_tier, status, min_balance, max_balance });
+      const result = searchUsers({ query, kyc_tier, kyc_state, status, min_balance, max_balance });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
@@ -546,6 +548,25 @@ server.tool(
   async ({ days, include_pending }) => {
     try {
       const result = getFailedTransactions({ days, include_pending });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADMIN TOOL 7: get_kyc_stats
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'get_kyc_stats',
+  'Returns platform-wide KYC statistics: distribution by state (FULL_KYC, MIN_KYC, PENDING, REJECTED), ' +
+  'pending verification queue, rejected users with reasons, expiring wallets, and success/failure rates. ' +
+  'Use this when an admin asks "KYC stats", "how many pending KYC?", "rejected users", "expiring wallets", or "KYC completion rate".',
+  {},
+  async () => {
+    try {
+      const result = getKycStats();
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
