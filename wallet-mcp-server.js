@@ -60,6 +60,10 @@ import {
   getMerchantInsights,
   getPeakUsage,
   getMonthlyTrends,
+  // KYC Expiry
+  getKycExpiringUsers,
+  queryKycExpiry,
+  generateKycRenewalReport,
 } from './mock-data.js';
 
 // ── Create MCP Server instance ────────────────────────────────────────────────
@@ -952,6 +956,69 @@ server.tool(
   async ({ months }) => {
     try {
       const result = getMonthlyTrends({ months });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ── KYC Expiry Tools ──────────────────────────────────────────────────────────
+
+server.tool(
+  'get_kyc_expiring_users',
+  'Filters users whose MINIMUM KYC is expiring within a given timeframe. Shows urgency bands (expired, critical ≤7d, warning ≤30d, upcoming ≤90d). ' +
+  'Use when asked "which users have expiring KYC?", "KYC renewals due", "expired wallets".',
+  {
+    days_ahead: z.number().default(90).describe('Look-ahead window in days (default: 90)'),
+    include_expired: z.boolean().default(false).describe('Include already-expired users'),
+    urgency: z.enum(['expired', 'critical', 'warning', 'upcoming']).optional().describe('Filter by urgency band'),
+    sort_by: z.enum(['expiry_date', 'balance', 'name']).default('expiry_date').describe('Sort order'),
+  },
+  async ({ days_ahead, include_expired, urgency, sort_by }) => {
+    try {
+      const result = getKycExpiringUsers({ days_ahead, include_expired, urgency, sort_by });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'query_kyc_expiry',
+  'Flexible database-style query for KYC expiry information. Supports date range filtering, state filters, balance thresholds, and returns aggregations. ' +
+  'Use when asked "KYC expiry between dates", "users with expiring KYC and balance above X", "KYC database query".',
+  {
+    from_date: z.string().optional().describe('Start date for expiry range (ISO format)'),
+    to_date: z.string().optional().describe('End date for expiry range (ISO format)'),
+    kyc_state: z.string().optional().describe('Filter by KYC state (e.g., MIN_KYC, FULL_KYC_PENDING)'),
+    wallet_state: z.string().optional().describe('Filter by wallet state (ACTIVE, SUSPENDED, etc.)'),
+    min_balance: z.string().optional().describe('Minimum balance in paise'),
+    include_inactive: z.boolean().default(false).describe('Include inactive/suspended wallets'),
+    limit: z.number().default(50).describe('Max results to return'),
+  },
+  async ({ from_date, to_date, kyc_state, wallet_state, min_balance, include_inactive, limit }) => {
+    try {
+      const result = queryKycExpiry({ from_date, to_date, kyc_state, wallet_state, min_balance, include_inactive, limit });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  'generate_kyc_renewal_report',
+  'Generates a comprehensive KYC renewal compliance report with executive summary, urgency breakdown, financial impact, and RBI compliance recommendations. ' +
+  'Use when asked "KYC renewal report", "compliance report", "KYC audit", "upcoming renewals report".',
+  {
+    days_ahead: z.number().default(90).describe('Look-ahead window for renewals (default: 90 days)'),
+    report_format: z.enum(['summary', 'detailed']).default('detailed').describe('Report detail level'),
+  },
+  async ({ days_ahead, report_format }) => {
+    try {
+      const result = generateKycRenewalReport({ days_ahead, report_format });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
