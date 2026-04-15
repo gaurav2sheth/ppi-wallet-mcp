@@ -5,11 +5,15 @@
   "private": true,
   "scripts": {
     "start": "node wallet-mcp-server.js",
-    "test": "node test-tools.js"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.4"
   }
 }
