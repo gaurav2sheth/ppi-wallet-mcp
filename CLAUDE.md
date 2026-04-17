@@ -1,6 +1,6 @@
 # PPI Wallet MCP Server
 
-39 Claude AI tools exposed via Model Context Protocol for natural language wallet operations.
+49 Claude AI tools exposed via Model Context Protocol for natural language wallet operations.
 
 **Part of the PPI Wallet Platform** — see root `CLAUDE.md` for ecosystem overview.
 
@@ -12,14 +12,16 @@ Node.js + `@modelcontextprotocol/sdk` + Zod validation. Runs via stdio transport
 
 | File | Purpose |
 |------|---------|
-| `wallet-mcp-server.js` | All 39 tool definitions with Zod schemas |
+| `wallet-mcp-server.js` | All 49 tool definitions with Zod schemas |
 | `mock-data.js` | 200 seeded users, 500+ transactions, BigInt paise arithmetic |
 | `chat-handler.js` | Claude chat with tool orchestration |
 | `services/sub-wallet-service.js` | Sub-wallet CRUD: load, spend, eligibility, utilisation |
 | `services/wallet-load-guard.js` | 3 RBI rules + Claude Haiku suggestions |
 | `services/kyc-alert-service.js` | KYC expiry detection + Claude Haiku personalised messages |
 
-## Tool Categories (39 Total)
+## Tool Categories (49 Total)
+
+Count verified against source: `grep -cE '^\s*server\.tool\(' wallet-mcp-server.js` → 49.
 
 - **User Tools (12)**: get_wallet_balance, get_transaction_history, flag/unflag_suspicious_transaction, get_spending_summary, search_transactions, get_user_profile, compare_spending, detect_recurring_payments, generate_report, get_notifications, set_alert_threshold
 - **Transaction Tools (5)**: add_money, pay_merchant, transfer_p2p, pay_bill, request_refund
@@ -27,6 +29,8 @@ Node.js + `@modelcontextprotocol/sdk` + Zod validation. Runs via stdio transport
 - **KYC Tools (5)**: approve_kyc, reject_kyc, request_kyc_upgrade, query_kyc_expiry, generate_kyc_renewal_report
 - **Support Tools (3)**: raise_dispute, get_dispute_status, get_refund_status
 - **Sub-Wallet Tools (4)**: get_sub_wallets, load_sub_wallet, get_sub_wallet_transactions, validate_merchant_eligibility
+- **KYC Agent Tools (5)**: send_kyc_notification, check_kyc_upgrade_status, grant_upgrade_reward, get_agent_escalations, resolve_escalation
+- **Support Agent Tools (5)**: get_support_tickets, create_support_ticket, resolve_support_ticket, get_reward_history, get_load_guard_log
 
 ## Mock Data (mock-data.js)
 
