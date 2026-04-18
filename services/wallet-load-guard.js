@@ -320,6 +320,14 @@ const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 // Per-user locks to serialize concurrent processLoad calls for the same user.
 const userLocks = new Map();
 
+// Monotonic counter guarantees unique transaction IDs even when two calls
+// complete inside the same millisecond (Date.now() collision).
+let txnSequence = 0;
+function nextTxnId(userId) {
+  txnSequence = (txnSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `TXN-${Date.now()}-${txnSequence}-${userId}`;
+}
+
 function pruneIdempotencyStore() {
   const now = Date.now();
   for (const [key, entry] of idempotencyStore.entries()) {
@@ -369,8 +377,16 @@ export async function processLoad({ userId, amountPaise, idempotencyKey, apiKey 
   }
 
   return withUserLock(userId, async () => {
-    // Re-check inside the lock in case another queued call for the same user
-    // just committed and updated state between our entry and the validation.
+    // Re-check the idempotency cache inside the lock. Two concurrent
+    // calls with the SAME key both miss the pre-lock cache check, then
+    // serialize here. The first to reach this point commits and caches;
+    // the second should see the cached result and return it instead of
+    // re-committing. Without this re-check, both calls commit twice.
+    const cachedUnderLock = idempotencyStore.get(idempotencyKey);
+    if (cachedUnderLock && cachedUnderLock.userId === userId) {
+      return cachedUnderLock.result;
+    }
+
     const validation = await validateLoadAmount(userId, amountPaise, apiKey);
 
     if (!validation.allowed) {
@@ -392,7 +408,7 @@ export async function processLoad({ userId, amountPaise, idempotencyKey, apiKey 
     // `ledger.append(...)` call would go here, inside the lock.
     const success = {
       status: 'SUCCESS',
-      transactionId: `TXN-${Date.now()}-${userId}`,
+      transactionId: nextTxnId(userId),
       userId,
       amountPaise,
       balanceAfter: Number(validation.new_balance) * 100, // rupees → paise
@@ -410,4 +426,5 @@ export function __resetLoadGuardState() {
   idempotencyStore.clear();
   userLocks.clear();
   blockedAttempts.length = 0;
+  txnSequence = 0;
 }
