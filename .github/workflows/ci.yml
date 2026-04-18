@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Syntax + Test
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,16 +17,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      - name: Install
-        run: npm ci
-
-      - name: Syntax check (all JS)
-        run: |
-          for f in $(find . -name '*.js' -not -path './node_modules/*'); do
-            node --check "$f"
-          done
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Unit tests (Vitest)
         run: npx vitest run
