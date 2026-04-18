@@ -1,0 +1,243 @@
+{
+  "version": "0.1",
+  "description": "Golden dataset for KYC Upgrade Agent classification. Each case has a human-verified expected decision. Structure documented in docs/kyc-agent.md §5.1. Current file contains 30 of the planned 200 cases; remaining 170 tracked in backlog.",
+  "generated_at": "2026-04-17",
+  "target_total_cases": 200,
+  "current_populated": 30,
+  "schema": {
+    "case_id": "string — KYC-GOLD-NNN",
+    "category": "priority_clean | priority_boundary | strategy_selection | offer_selection | message_tone | escalation_trigger | priority_inversion",
+    "input": {
+      "name": "string (fictional)",
+      "days_until_expiry": "integer 0..14",
+      "balance_paise": "string (paise as string integer)",
+      "activity_score": "HIGH | MEDIUM | LOW | DORMANT",
+      "transaction_count_30d": "integer",
+      "previous_outreach_attempts": "integer 0..5"
+    },
+    "expected": {
+      "priority": "P1_CRITICAL | P2_HIGH | P3_MEDIUM | P4_LOW",
+      "intervention_strategy": "URGENT_MULTI_TOUCH | STANDARD_OUTREACH | GENTLE_REMINDER | MONITOR_ONLY",
+      "suggested_offer": "NONE | CASHBACK_50 | CASHBACK_100 | BONUS_SCRATCH_CARD",
+      "escalate_immediately": "boolean"
+    },
+    "notes": "string — rationale / edge-case hint"
+  },
+  "cases": [
+    {
+      "case_id": "KYC-GOLD-001",
+      "category": "priority_clean",
+      "input": { "name": "Rahul Verma", "days_until_expiry": 1, "balance_paise": "8500000", "activity_score": "HIGH", "transaction_count_30d": 28, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P1_CRITICAL", "intervention_strategy": "URGENT_MULTI_TOUCH", "suggested_offer": "CASHBACK_100", "escalate_immediately": true },
+      "notes": "Textbook P1: 1 day + ₹85K + high activity"
+    },
+    {
+      "case_id": "KYC-GOLD-002",
+      "category": "priority_clean",
+      "input": { "name": "Neha Kapoor", "days_until_expiry": 2, "balance_paise": "5100000", "activity_score": "MEDIUM", "transaction_count_30d": 7, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P1_CRITICAL", "intervention_strategy": "URGENT_MULTI_TOUCH", "suggested_offer": "CASHBACK_100", "escalate_immediately": true },
+      "notes": "P1 triggered by balance > ₹50K on day 2"
+    },
+    {
+      "case_id": "KYC-GOLD-003",
+      "category": "priority_clean",
+      "input": { "name": "Aarav Gupta", "days_until_expiry": 1, "balance_paise": "12000000", "activity_score": "HIGH", "transaction_count_30d": 35, "previous_outreach_attempts": 1 },
+      "expected": { "priority": "P1_CRITICAL", "intervention_strategy": "URGENT_MULTI_TOUCH", "suggested_offer": "CASHBACK_100", "escalate_immediately": true },
+      "notes": "High-value (₹1.2L) + 1 day + already attempted once"
+    },
+    {
+      "case_id": "KYC-GOLD-004",
+      "category": "priority_clean",
+      "input": { "name": "Ishaan Malhotra", "days_until_expiry": 2, "balance_paise": "7800000", "activity_score": "HIGH", "transaction_count_30d": 21, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P1_CRITICAL", "intervention_strategy": "URGENT_MULTI_TOUCH", "suggested_offer": "CASHBACK_100", "escalate_immediately": true },
+      "notes": "₹78K + active; classic P1"
+    },
+    {
+      "case_id": "KYC-GOLD-005",
+      "category": "priority_clean",
+      "input": { "name": "Divya Reddy", "days_until_expiry": 1, "balance_paise": "6500000", "activity_score": "MEDIUM", "transaction_count_30d": 8, "previous_outreach_attempts": 2 },
+      "expected": { "priority": "P1_CRITICAL", "intervention_strategy": "URGENT_MULTI_TOUCH", "suggested_offer": "CASHBACK_100", "escalate_immediately": true },
+      "notes": "2 attempts + 1 day + ₹65K — immediate ops escalation; non-responsive to standard outreach"
+    },
+
+    {
+      "case_id": "KYC-GOLD-006",
+      "category": "priority_clean",
+      "input": { "name": "Meera Iyer", "days_until_expiry": 4, "balance_paise": "1200000", "activity_score": "MEDIUM", "transaction_count_30d": 6, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "STANDARD_OUTREACH", "suggested_offer": "CASHBACK_50", "escalate_immediately": false },
+      "notes": "Textbook P2: 4 days + ₹12K + medium activity"
+    },
+    {
+      "case_id": "KYC-GOLD-007",
+      "category": "priority_clean",
+      "input": { "name": "Tanya Joshi", "days_until_expiry": 3, "balance_paise": "1800000", "activity_score": "HIGH", "transaction_count_30d": 13, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "STANDARD_OUTREACH", "suggested_offer": "CASHBACK_50", "escalate_immediately": false },
+      "notes": "3 days + ₹18K + very active; follow-up 48h"
+    },
+    {
+      "case_id": "KYC-GOLD-008",
+      "category": "priority_clean",
+      "input": { "name": "Vikram Chauhan", "days_until_expiry": 4, "balance_paise": "1500000", "activity_score": "MEDIUM", "transaction_count_30d": 5, "previous_outreach_attempts": 1 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "STANDARD_OUTREACH", "suggested_offer": "CASHBACK_50", "escalate_immediately": false },
+      "notes": "P2 — 1 prior attempt but still within standard window"
+    },
+    {
+      "case_id": "KYC-GOLD-009",
+      "category": "priority_clean",
+      "input": { "name": "Aditi Saxena", "days_until_expiry": 3, "balance_paise": "2500000", "activity_score": "HIGH", "transaction_count_30d": 19, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "STANDARD_OUTREACH", "suggested_offer": "CASHBACK_50", "escalate_immediately": false },
+      "notes": "₹25K + highly active user — retention play"
+    },
+    {
+      "case_id": "KYC-GOLD-010",
+      "category": "priority_clean",
+      "input": { "name": "Sahil Khanna", "days_until_expiry": 4, "balance_paise": "1100000", "activity_score": "MEDIUM", "transaction_count_30d": 4, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "STANDARD_OUTREACH", "suggested_offer": "CASHBACK_50", "escalate_immediately": false },
+      "notes": "Classic P2 low end"
+    },
+
+    {
+      "case_id": "KYC-GOLD-011",
+      "category": "priority_clean",
+      "input": { "name": "Karan Mehta", "days_until_expiry": 6, "balance_paise": "180000", "activity_score": "HIGH", "transaction_count_30d": 14, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P3_MEDIUM", "intervention_strategy": "GENTLE_REMINDER", "suggested_offer": "BONUS_SCRATCH_CARD", "escalate_immediately": false },
+      "notes": "Textbook P3: low balance + high activity — retention via gamification"
+    },
+    {
+      "case_id": "KYC-GOLD-012",
+      "category": "priority_clean",
+      "input": { "name": "Riya Patel", "days_until_expiry": 5, "balance_paise": "90000", "activity_score": "MEDIUM", "transaction_count_30d": 8, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P3_MEDIUM", "intervention_strategy": "GENTLE_REMINDER", "suggested_offer": "BONUS_SCRATCH_CARD", "escalate_immediately": false },
+      "notes": "P3 — 5 days + ₹900 + medium activity"
+    },
+    {
+      "case_id": "KYC-GOLD-013",
+      "category": "priority_clean",
+      "input": { "name": "Arjun Rao", "days_until_expiry": 6, "balance_paise": "220000", "activity_score": "HIGH", "transaction_count_30d": 18, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P3_MEDIUM", "intervention_strategy": "GENTLE_REMINDER", "suggested_offer": "BONUS_SCRATCH_CARD", "escalate_immediately": false },
+      "notes": "High-activity user with low balance; gamified nudge is the right play"
+    },
+    {
+      "case_id": "KYC-GOLD-014",
+      "category": "priority_clean",
+      "input": { "name": "Sneha Nair", "days_until_expiry": 5, "balance_paise": "150000", "activity_score": "MEDIUM", "transaction_count_30d": 6, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P3_MEDIUM", "intervention_strategy": "GENTLE_REMINDER", "suggested_offer": "BONUS_SCRATCH_CARD", "escalate_immediately": false },
+      "notes": "Classic P3"
+    },
+    {
+      "case_id": "KYC-GOLD-015",
+      "category": "priority_clean",
+      "input": { "name": "Rohan Bhatia", "days_until_expiry": 6, "balance_paise": "300000", "activity_score": "HIGH", "transaction_count_30d": 22, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P3_MEDIUM", "intervention_strategy": "GENTLE_REMINDER", "suggested_offer": "BONUS_SCRATCH_CARD", "escalate_immediately": false },
+      "notes": "₹3K + 22 txns — habitual user, retention value"
+    },
+
+    {
+      "case_id": "KYC-GOLD-016",
+      "category": "priority_clean",
+      "input": { "name": "Babulal Yadav", "days_until_expiry": 7, "balance_paise": "15000", "activity_score": "DORMANT", "transaction_count_30d": 0, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P4_LOW", "intervention_strategy": "MONITOR_ONLY", "suggested_offer": "NONE", "escalate_immediately": false },
+      "notes": "Textbook P4 — dormant + low balance"
+    },
+    {
+      "case_id": "KYC-GOLD-017",
+      "category": "priority_clean",
+      "input": { "name": "Shanti Devi", "days_until_expiry": 7, "balance_paise": "5000", "activity_score": "DORMANT", "transaction_count_30d": 0, "previous_outreach_attempts": 1 },
+      "expected": { "priority": "P4_LOW", "intervention_strategy": "MONITOR_ONLY", "suggested_offer": "NONE", "escalate_immediately": false },
+      "notes": "Previously attempted, still dormant — CAC > LTV"
+    },
+    {
+      "case_id": "KYC-GOLD-018",
+      "category": "priority_clean",
+      "input": { "name": "Gopal Krishan", "days_until_expiry": 6, "balance_paise": "30000", "activity_score": "LOW", "transaction_count_30d": 2, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P4_LOW", "intervention_strategy": "MONITOR_ONLY", "suggested_offer": "NONE", "escalate_immediately": false },
+      "notes": "Low activity + small balance + enough time; monitor"
+    },
+    {
+      "case_id": "KYC-GOLD-019",
+      "category": "priority_clean",
+      "input": { "name": "Mohan Lal", "days_until_expiry": 7, "balance_paise": "8000", "activity_score": "LOW", "transaction_count_30d": 1, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P4_LOW", "intervention_strategy": "MONITOR_ONLY", "suggested_offer": "NONE", "escalate_immediately": false },
+      "notes": "P4 — nothing justifies spend"
+    },
+    {
+      "case_id": "KYC-GOLD-020",
+      "category": "priority_clean",
+      "input": { "name": "Sarita Kumari", "days_until_expiry": 7, "balance_paise": "20000", "activity_score": "DORMANT", "transaction_count_30d": 0, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P4_LOW", "intervention_strategy": "MONITOR_ONLY", "suggested_offer": "NONE", "escalate_immediately": false },
+      "notes": "Dormant with trivial balance"
+    },
+
+    {
+      "case_id": "KYC-GOLD-021",
+      "category": "priority_boundary",
+      "input": { "name": "Suresh M", "days_until_expiry": 2, "balance_paise": "5000000", "activity_score": "HIGH", "transaction_count_30d": 15, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P1_CRITICAL", "intervention_strategy": "URGENT_MULTI_TOUCH" },
+      "notes": "Boundary: balance EXACTLY ₹50,000 — policy is > threshold triggers P1; should still trigger because 2 days also triggers"
+    },
+    {
+      "case_id": "KYC-GOLD-022",
+      "category": "priority_boundary",
+      "input": { "name": "Kavya Bansal", "days_until_expiry": 3, "balance_paise": "5000001", "activity_score": "MEDIUM", "transaction_count_30d": 5, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P1_CRITICAL", "intervention_strategy": "URGENT_MULTI_TOUCH" },
+      "notes": "Boundary: balance 1 paisa over ₹50K — P1 due to balance"
+    },
+    {
+      "case_id": "KYC-GOLD-023",
+      "category": "priority_boundary",
+      "input": { "name": "Nikhil Trivedi", "days_until_expiry": 4, "balance_paise": "4999999", "activity_score": "MEDIUM", "transaction_count_30d": 6, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "STANDARD_OUTREACH" },
+      "notes": "Boundary: balance 1 paisa under ₹50K; 4 days → P2, not P1"
+    },
+    {
+      "case_id": "KYC-GOLD-024",
+      "category": "priority_boundary",
+      "input": { "name": "Isha Chawla", "days_until_expiry": 5, "balance_paise": "1000000", "activity_score": "MEDIUM", "transaction_count_30d": 5, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "STANDARD_OUTREACH" },
+      "notes": "Boundary: balance exactly ₹10K — P2 due to balance, even though days > 4"
+    },
+    {
+      "case_id": "KYC-GOLD-025",
+      "category": "priority_boundary",
+      "input": { "name": "Prateek Soni", "days_until_expiry": 6, "balance_paise": "999999", "activity_score": "MEDIUM", "transaction_count_30d": 4, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P3_MEDIUM", "intervention_strategy": "GENTLE_REMINDER" },
+      "notes": "Boundary: balance 1 paisa under ₹10K, 6 days + activity — P3"
+    },
+
+    {
+      "case_id": "KYC-GOLD-026",
+      "category": "priority_inversion",
+      "input": { "name": "Anjali Rao", "days_until_expiry": 2, "balance_paise": "250000", "activity_score": "HIGH", "transaction_count_30d": 21, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "URGENT_MULTI_TOUCH" },
+      "notes": "Priority inversion: low balance but 2 days + very active → habit continuity overrides pure balance math; URGENT strategy with P2 priority label"
+    },
+    {
+      "case_id": "KYC-GOLD-027",
+      "category": "priority_inversion",
+      "input": { "name": "Diya Mishra", "days_until_expiry": 2, "balance_paise": "750000", "activity_score": "HIGH", "transaction_count_30d": 18, "previous_outreach_attempts": 0 },
+      "expected": { "priority": "P2_HIGH", "intervention_strategy": "URGENT_MULTI_TOUCH", "suggested_offer": "CASHBACK_50" },
+      "notes": "2 days + ₹7.5K + highly active — retention play > balance recovery play"
+    },
+    {
+      "case_id": "KYC-GOLD-028",
+      "category": "escalation_trigger",
+      "input": { "name": "Vikram Patel", "days_until_expiry": 1, "balance_paise": "7500000", "activity_score": "HIGH", "transaction_count_30d": 16, "previous_outreach_attempts": 2 },
+      "expected": { "escalate_immediately": true },
+      "notes": "2 prior attempts + 1 day + ₹75K → immediate human escalation regardless of strategy"
+    },
+    {
+      "case_id": "KYC-GOLD-029",
+      "category": "escalation_trigger",
+      "input": { "name": "Sanjana Agarwal", "days_until_expiry": 2, "balance_paise": "3500000", "activity_score": "MEDIUM", "transaction_count_30d": 9, "previous_outreach_attempts": 3 },
+      "expected": { "escalate_immediately": true },
+      "notes": "3 attempts, still unresponsive, ₹35K at risk — escalate"
+    },
+    {
+      "case_id": "KYC-GOLD-030",
+      "category": "escalation_trigger",
+      "input": { "name": "Ravi Shankar", "days_until_expiry": 3, "balance_paise": "10000000", "activity_score": "HIGH", "transaction_count_30d": 25, "previous_outreach_attempts": 1 },
+      "expected": { "escalate_immediately": true },
+      "notes": "₹1L+ at risk (above ₹50K P1 threshold) — always escalate regardless of prior attempts"
+    }
+  ]
+}

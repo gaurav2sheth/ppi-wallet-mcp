@@ -12,6 +12,7 @@
 
 import { runKycUpgradeAgent, getAgentRunHistory, getActiveNotifications, getNotificationsByUser, markNotificationRead, markNotificationActionTaken, observeUserResponse, handleFollowUpOrEscalation, addNotification } from './agents/kyc-upgrade-agent.js';
 import { escalateToOps, getEscalations, resolveEscalation, updateEscalationStatus, getEscalationStats } from './agents/escalation-manager.js';
+import { createTicket, getTicket, getUserTickets, getOpenTickets, resolveTicket as resolveTicketFn, getTicketStats } from './agents/support-ticket-manager.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';  // Bundled with @modelcontextprotocol/sdk
@@ -1230,6 +1231,182 @@ server.tool(
       };
     } catch (err) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message, escalation_id }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 45: get_support_tickets
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'get_support_tickets',
+  'Get support tickets filtered by user, status, or priority. ' +
+  'Use this when asked about open tickets, user complaints, or support queue status.',
+  {
+    user_id: z.string().optional().describe('Filter by user ID'),
+    status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']).optional().describe('Filter by ticket status'),
+    priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional().describe('Filter by priority'),
+  },
+  async ({ user_id, status, priority }) => {
+    try {
+      let tickets;
+      if (user_id) {
+        tickets = getUserTickets(user_id);
+      } else {
+        tickets = getOpenTickets(priority);
+      }
+      if (status) {
+        tickets = tickets.filter(t => t.status === status);
+      }
+      const stats = getTicketStats();
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ tickets, total: tickets.length, stats }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 46: create_support_ticket
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'create_support_ticket',
+  'Create a support ticket for an unresolved user issue. ' +
+  'Use this when a customer issue cannot be resolved immediately and needs tracking.',
+  {
+    user_id: z.string().describe('User ID'),
+    issue_type: z.string().describe('Type of issue (e.g. transaction_failed, kyc_blocked, balance_mismatch)'),
+    summary: z.string().describe('Summary of the issue'),
+    priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional().default('MEDIUM').describe('Ticket priority'),
+    conversation_history: z.string().optional().describe('Conversation history for context'),
+  },
+  async ({ user_id, issue_type, summary, priority, conversation_history }) => {
+    try {
+      const ticket = createTicket(user_id, {
+        issue_type,
+        issue_summary: summary,
+        priority,
+        conversation_history,
+      });
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(ticket, null, 2),
+        }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 47: resolve_support_ticket
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'resolve_support_ticket',
+  'Resolve an open support ticket. ' +
+  'Use this when a support issue has been addressed and can be closed.',
+  {
+    ticket_id: z.string().describe('Ticket ID to resolve'),
+    resolved_by: z.string().describe('Agent or admin who resolved the ticket'),
+    resolution_notes: z.string().describe('Notes on how the issue was resolved'),
+  },
+  async ({ ticket_id, resolved_by, resolution_notes }) => {
+    try {
+      const ticket = resolveTicketFn(ticket_id, resolved_by, resolution_notes);
+      if (!ticket) {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ error: 'Ticket not found', ticket_id }, null, 2),
+          }],
+        };
+      }
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(ticket, null, 2),
+        }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 48: get_reward_history
+// ═══════════════════════════════════════════════════════════════════════════════
+server.tool(
+  'get_reward_history',
+  'Get cashback credits and scratch cards for a user. ' +
+  'Use this when asked about rewards, cashback, or promotional credits.',
+  {
+    user_id: z.string().describe('Unique wallet user ID'),
+    days: z.number().optional().default(30).describe('Number of past days to look back (default: 30)'),
+  },
+  async ({ user_id, days }) => {
+    try {
+      const history = getTransactionHistory(user_id, days, { entry_type: 'credit' });
+      if (history.error) {
+        return { content: [{ type: 'text', text: JSON.stringify(history, null, 2) }], isError: true };
+      }
+      const rewardTypes = ['CASHBACK', 'REWARD', 'REFUND'];
+      const rewards = (history.transactions || []).filter(t =>
+        rewardTypes.some(rt => (t.transaction_type || '').toUpperCase().includes(rt) || (t.description || '').toUpperCase().includes(rt))
+      );
+      const totalCashbackPaise = rewards.reduce((sum, t) => sum + Number(t.amount_paise || 0), 0);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            user_id,
+            rewards,
+            total_cashback_paise: totalCashbackPaise,
+            total_rewards: rewards.length,
+          }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOOL 49: get_load_guard_log
+// ═══════════════════════════════════════════════════════════════════════════════
+import { getBlockedAttempts as _getBlockedAttempts } from './services/wallet-load-guard.js';
+
+server.tool(
+  'get_load_guard_log',
+  'Get recent blocked transaction attempts with block reasons. ' +
+  'Use this when asked about failed loads, blocked top-ups, or compliance rejections.',
+  {
+    user_id: z.string().optional().describe('Filter by user ID'),
+    limit: z.number().optional().default(10).describe('Maximum entries to return (default: 10)'),
+  },
+  async ({ user_id, limit }) => {
+    try {
+      let attempts = _getBlockedAttempts();
+      if (user_id) {
+        attempts = attempts.filter(a => a.user_id === user_id);
+      }
+      attempts = attempts.slice(0, limit);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ attempts, total: attempts.length }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Internal server error', message: err.message }, null, 2) }], isError: true };
     }
   }
 );
