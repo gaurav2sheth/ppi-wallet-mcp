@@ -5,12 +5,15 @@
   "private": true,
   "scripts": {
     "start": "node wallet-mcp-server.js",
+    "start:admin-api": "node admin-api-server.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
     "node-cron": "^4.2.1"
   },
   "devDependencies": {

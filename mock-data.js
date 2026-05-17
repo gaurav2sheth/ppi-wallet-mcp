@@ -3202,3 +3202,6 @@ export function generateKycRenewalReport({ days_ahead = 90, report_format = 'det
 
   return report;
 }
+
+// Raw data exports for admin REST API
+export { users, transactions, subWalletStore };
